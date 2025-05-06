@@ -3,6 +3,11 @@ volumes:
   lago_redis_data:
   lago_storage_data:
 
+networks:
+  nginx-proxy:
+    external: true
+  lago:
+
 x-postgres-image: &postgres-image
   image: postgres:14-alpine
 x-redis-image: &redis-image
@@ -95,8 +100,8 @@ services:
       POSTGRES_SCHEMA: public
     volumes:
       - lago_postgres_data:/data/postgres
-    ports:
-      - ${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}
+    networks:
+      - lago
 
   redis:
     <<: *redis-image
@@ -110,8 +115,8 @@ services:
     command: --port ${REDIS_PORT:-6379}
     volumes:
       - lago_redis_data:/data
-    ports:
-      - ${REDIS_PORT:-6379}:${REDIS_PORT:-6379}
+    networks:
+      - lago
 
   migrate:
     <<: *backend-image
@@ -123,6 +128,8 @@ services:
     command: ["./scripts/migrate.sh"]
     environment:
       <<: *backend-env
+    networks:
+      - lago
 
   api:
     <<: *backend-image
@@ -148,8 +155,9 @@ services:
       <<: [*backend-env, *lago-api-url, *lago-front-url]
     volumes:
       - lago_storage_data:/app/storage
-    ports:
-      - ${API_PORT:-3000}:3000
+    networks:
+      - lago
+      - nginx-proxy
 
   front:
     <<: *frontend-image
@@ -163,8 +171,9 @@ services:
         restart: true
     environment:
       <<: [*frontend-env, *lago-api-url, *lago-front-url]
-    ports:
-      - ${FRONT_PORT:-80}:80
+    networks:
+      - lago
+      - nginx-proxy
     #  - 443:443
     # Using SSL with Let's Encrypt
     # volumes:
@@ -210,6 +219,8 @@ services:
       <<: [*backend-env, *lago-api-url]
     volumes:
       - lago_storage_data:/app/storage
+    networks:
+      - lago
 
   # You can uncomment this if you want to use a dedicated Sidekiq worker for the event ingestion.
   # It is recommendend if you have a high usage of events to not impact the other Sidekiq Jobs.
@@ -290,6 +301,10 @@ services:
     command: ["./scripts/start.clock.sh"]
     environment:
       <<: [*backend-env, *lago-api-url]
+    networks:
+      - lago
 
   pdf:
     image: getlago/lago-gotenberg:7.8.2
+    networks:
+      - lago
